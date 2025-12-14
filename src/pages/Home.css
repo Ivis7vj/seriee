@@ -36,12 +36,16 @@
 
 .logo {
   font-size: 28px;
-  font-weight: 900;
+  font-weight: 400;
+  /* Anton is naturally bold */
   color: var(--accent-color);
   text-decoration: none;
   display: flex;
   align-items: center;
   gap: 10px;
+  font-family: 'Anton', sans-serif;
+  /* UPDATE LINE */
+  letter-spacing: 1px;
 }
 
 .header-nav {

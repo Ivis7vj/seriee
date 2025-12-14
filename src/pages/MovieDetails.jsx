@@ -1109,7 +1109,7 @@ const MovieDetails = () => {
 
                     {/* LEFT: Title & Where to Watch */}
                     <div style={{ flex: 1, minWidth: '350px', textAlign: 'left' }}>
-                        <h1 style={{ fontSize: '4.5rem', textTransform: 'uppercase', fontWeight: '900', margin: '0 0 1rem 0', fontFamily: 'Impact, Inter, sans-serif', letterSpacing: '1px', lineHeight: '0.9' }}>
+                        <h1 style={{ fontSize: '4.5rem', textTransform: 'uppercase', fontWeight: '400', margin: '0 0 1rem 0', fontFamily: 'Anton, Impact, sans-serif', letterSpacing: '1px', lineHeight: '0.9' }}>
                             {title}
                         </h1>
 
