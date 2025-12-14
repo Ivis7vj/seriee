@@ -21,6 +21,18 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app);
+let app, auth, db;
+try {
+    if (!firebaseConfig.apiKey) throw new Error("Missing API Key");
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
+} catch (error) {
+    console.error("Firebase Initialization Error:", error);
+    // Continue with nulls to allow App to mount and show ErrorBoundary
+    app = null;
+    auth = null;
+    db = null;
+}
+
+export { auth, db };
