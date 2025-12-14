@@ -1,0 +1,1737 @@
+import { useState, useEffect } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { MdStar, MdAdd, MdRemove, MdCreate, MdFavorite, MdFavoriteBorder, MdVisibility, MdVisibilityOff, MdKeyboardArrowDown, MdClose, MdShare, MdCheck, MdIosShare, MdRateReview, MdArrowBack, MdPlayArrow, MdEdit, MdSentimentSatisfiedAlt, MdSentimentNeutral, MdSentimentVeryDissatisfied } from 'react-icons/md';
+import { FaArrowLeft } from 'react-icons/fa';
+import ReviewsDrawer from '../components/ReviewsDrawer';
+import ReviewModal from '../components/ReviewModal';
+import StarBadger from '../components/StarBadger';
+import PosterBadge from '../components/PosterBadge';
+import StoryCard from '../components/StoryCard';
+import ShareModal from '../components/ShareModal';
+import { useStoryGenerator } from '../hooks/useStoryGenerator';
+import { useNotification } from '../context/NotificationContext';
+import { useAuth } from '../context/AuthContext';
+import { db } from '../firebase-config'; // Ensure db is exported from firebase-config
+import { doc, deleteDoc, updateDoc, arrayUnion, arrayRemove, getDoc, collection, addDoc, query, where, getDocs, orderBy, onSnapshot } from 'firebase/firestore';
+import './Home.css';
+
+const MovieDetails = () => {
+    const { id, seasonNumber } = useParams();
+    const navigate = useNavigate();
+    const { currentUser } = useAuth(); // Get Access to Auth
+    const isTv = true;
+    const type = 'tv';
+
+    const [details, setDetails] = useState(null);
+    const [cast, setCast] = useState([]);
+    const [crew, setCrew] = useState([]);
+    const [reviewsData, setReviewsData] = useState([]);
+    const [ratings, setRatings] = useState([]);
+    const [trailer, setTrailer] = useState(null);
+
+    const [loading, setLoading] = useState(true);
+    const [inWatchlist, setInWatchlist] = useState(false);
+    const [isLiked, setIsLiked] = useState(false);
+
+    // Filter User Series Review (for Action Button State)
+    const userSeriesReview = reviewsData.find(r => r.tmdbId === parseInt(id || 0) && r.userId === currentUser?.uid && !r.isEpisode);
+
+    const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || '05587a49bd4890a9630d6c0e544e0f6f';
+    const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
+
+    const [selectedSeason, setSelectedSeason] = useState(seasonNumber ? parseInt(seasonNumber) : 1);
+    const [isSeasonOpen, setIsSeasonOpen] = useState(false);
+    const [episodes, setEpisodes] = useState([]);
+    const [seasonsValues, setSeasonsValues] = useState([]);
+
+    const [watchProviders, setWatchProviders] = useState(null);
+
+    // Review Likes State
+    const [reviewLikes, setReviewLikes] = useState({});
+
+    // Story Generator
+    const { generateStory, storyCardRef, isGenerating } = useStoryGenerator();
+    const [storyData, setStoryData] = useState(null);
+    const [shareModal, setShareModal] = useState({ isOpen: false, imageUrl: '' });
+    const [showStarBadge, setShowStarBadge] = useState(false); // Star Badge State
+    const [hasStarBadge, setHasStarBadge] = useState(false);
+    const [isReviewsOpen, setIsReviewsOpen] = useState(false);
+    const [isReviewOpen, setIsReviewOpen] = useState(false);
+    const [reviewingItem, setReviewingItem] = useState(null); // 'series' or episode object
+    const [existingReviewData, setExistingReviewData] = useState(null);
+
+    // Trigger generation when storyData is updated and component is ready
+    useEffect(() => {
+        if (storyData) {
+            const timer = setTimeout(async () => {
+                const result = await generateStory(storyData.movie.name);
+                if (result && result.success && result.method === 'fallback') {
+                    setShareModal({ isOpen: true, imageUrl: result.url });
+                }
+            }, 500);
+            return () => clearTimeout(timer);
+        }
+    }, [storyData, generateStory]);
+
+    const handleShare = (reviewItem, isEpisode = false) => {
+        let seasonName = null;
+        if (isEpisode) {
+            // Find season name from seasonsValues if available
+            const foundSeason = seasonsValues.find(s => s.season_number === reviewItem.seasonNumber);
+            seasonName = foundSeason ? (foundSeason.name || `Season ${reviewItem.seasonNumber}`) : `Season ${reviewItem.seasonNumber}`;
+        }
+
+        const name = isEpisode
+            ? `${details.name} (S${reviewItem.seasonNumber}E${reviewItem.episodeNumber})`
+            : details.name;
+
+        setStoryData({
+            movie: {
+                name: name,
+                poster_path: details.poster_path,
+                seasonName: seasonName // Pass to StoryCard
+            },
+            rating: reviewItem.rating,
+            review: reviewItem.review,
+            user: { handle: '@yourapp' }
+        });
+    };
+
+    useEffect(() => {
+        const savedReviewLikes = JSON.parse(localStorage.getItem('reviewLikes') || '{}');
+        setReviewLikes(savedReviewLikes);
+    }, []);
+
+    // Star Badge Prompt Logic (Moved to Top Level to avoid Hook Error)
+    useEffect(() => {
+        // Only trigger on Main Series Page (no seasonNumber param)
+        if (currentUser && details && !seasonNumber) {
+            const checkPrompt = async () => {
+                try {
+                    const userRef = doc(db, 'users', currentUser.uid);
+                    const snap = await getDoc(userRef);
+                    if (snap.exists()) {
+                        const d = snap.data();
+                        const hasStar = d.starSeries?.some(s => s.id === details.id);
+                        const hasPrompted = d.promptedSeries?.includes(String(details.id));
+                        if (!hasStar && !hasPrompted) setTimeout(() => setShowStarBadge(true), 1000);
+                    }
+                } catch (e) {
+                    console.error("Error checking prompt state", e);
+                }
+            };
+            checkPrompt();
+        }
+    }, [currentUser, details, seasonNumber]);
+
+    // Check Star Badge Status (Initial)
+    useEffect(() => {
+        if (currentUser && details && currentUser.starSeries) {
+            const hasStar = currentUser.starSeries.some(s => s.id === details.id);
+            setHasStarBadge(hasStar);
+        }
+    }, [currentUser, details]);
+
+    const handlePromptClose = () => {
+        setShowStarBadge(false);
+        // Assuming if prompt closed after YES, we earned a star.
+        // We can verify this or just optimistically set it to true if we know it was success.
+        // Or re-check sync? 
+        // For now, let's force a sync or just set true
+        // Actually, the Prompt tracks whether user clicked YES. 
+        // If we want to be precise, StarBadger should pass "earned: true" to onClose.
+        // But for now, if the star badge prompt WAS REVEALED and closed, it likely means interaction happened.
+        // Let's rely on syncUserState re-running or better yet, just manually set it if we suspect success.
+        // BUT, `StarBadger` updates FireStore. We should probably update local state too.
+
+        // Since StarBadger handles the update, we can just set this to true if we want immediate feedback
+        // But we don't know if they clicked Yes or No here.
+        // Let's assume we can fetch or listen.
+        // However, user specifically asked "WHEN THE USER CLICKED THE YES BUTTON... POSTER GETTING... STARBADGE".
+        // I'll update it optimistically here if needed, but better to update StarBadger to pass a success flag.
+        // For this step I'll just adding the state variable, I'll modify Star Badger call separately.
+        checkUser(); // Re-fetch to be sure
+    };
+
+    // Override handlePromptClose to receive success flag
+    const handleStarBadgeComplete = (success) => {
+        setShowStarBadge(false);
+        if (success) setHasStarBadge(true); // Immediate update
+        checkUser();
+    };
+
+    // Real-time Reviews Listener (Firestore) for this Series
+    useEffect(() => {
+        if (!id) return;
+        const q = query(collection(db, 'reviews'), where('tmdbId', '==', parseInt(id)));
+        const unsub = onSnapshot(q, (snapshot) => {
+            const fetched = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
+            // We replace local state with Firestore data to ensure ratings are accurate
+            setReviewsData(fetched);
+        });
+        return () => unsub();
+    }, [id, seasonNumber]);
+
+    const toggleReviewLike = async (reviewId) => {
+        if (!currentUser) return;
+        const reviewRef = doc(db, 'reviews', reviewId);
+
+        // Optimistic update locally
+        setReviewsData(prev => prev.map(r => {
+            if (r.id === reviewId) {
+                const hasLiked = r.likes?.includes(currentUser.uid);
+                return {
+                    ...r,
+                    likes: hasLiked ? r.likes.filter(id => id !== currentUser.uid) : [...(r.likes || []), currentUser.uid]
+                };
+            }
+            return r;
+        }));
+
+        // Fire and forget (or handle error logic, but for UI speed we optimistically update)
+        const reviewDoc = await getDoc(reviewRef);
+        if (reviewDoc.exists()) {
+            const data = reviewDoc.data();
+            const hasLiked = data.likes?.includes(currentUser.uid);
+            if (hasLiked) {
+                await updateDoc(reviewRef, { likes: arrayRemove(currentUser.uid) });
+            } else {
+                await updateDoc(reviewRef, { likes: arrayUnion(currentUser.uid) });
+            }
+        }
+    };
+
+    useEffect(() => {
+        const fetchData = async () => {
+            setLoading(true);
+            try {
+                // Parallel fetch for Details, Credits (Cast/Crew), Reviews, Providers, and External IDs
+                const [detailsRes, creditsRes, reviewsRes, providersRes, externalIdsRes, videosRes] = await Promise.all([
+                    fetch(`${TMDB_BASE_URL}/${type}/${id}?api_key=${TMDB_API_KEY}&append_to_response=images&include_image_language=en,null`),
+                    fetch(`${TMDB_BASE_URL}/${type}/${id}/credits?api_key=${TMDB_API_KEY}`),
+                    fetch(`${TMDB_BASE_URL}/${type}/${id}/reviews?api_key=${TMDB_API_KEY}`),
+                    fetch(`${TMDB_BASE_URL}/${type}/${id}/watch/providers?api_key=${TMDB_API_KEY}`),
+                    fetch(`${TMDB_BASE_URL}/${type}/${id}/external_ids?api_key=${TMDB_API_KEY}`),
+                    fetch(`${TMDB_BASE_URL}/${type}/${id}/videos?api_key=${TMDB_API_KEY}`)
+                ]);
+
+                const detailsData = await detailsRes.json();
+                const creditsData = await creditsRes.json();
+                const reviewsData = await reviewsRes.json();
+                const providersData = await providersRes.json();
+                const externalIdsData = await externalIdsRes.json();
+                const videosData = await videosRes.json();
+
+                // Fetch OMDb Ratings if IMDb ID exists
+                if (externalIdsData.imdb_id) {
+                    try {
+                        const omdbRes = await fetch(`https://www.omdbapi.com/?i=${externalIdsData.imdb_id}&apikey=15529774`);
+                        const omdbData = await omdbRes.json();
+                        setRatings(omdbData.Ratings || []);
+                        if (omdbData.imdbRating) {
+                            setRatings(prev => {
+                                // dedup if imdb already in Ratings array (sometimes it is, sometimes not)
+                                const exists = prev.some(r => r.Source === "Internet Movie Database");
+                                if (!exists) return [...prev, { Source: "Internet Movie Database", Value: `${omdbData.imdbRating}/10` }];
+                                return prev;
+                            });
+                        }
+                    } catch (e) {
+                        console.error("OMDb Fetch Error", e);
+                    }
+                }
+
+                // Set Watch Providers (Prioritize IN, then US)
+                setWatchProviders(providersData.results?.IN || providersData.results?.US || null);
+
+                setDetails(detailsData);
+                setCast(creditsData.cast?.slice(0, 10) || []); // Top 10 cast
+
+                // Get creators or executive producers for "Director" equivalent in TV
+                const creators = detailsData.created_by || [];
+                setCrew(creators);
+
+                if (videosData?.results) {
+                    const trailerVideo = videosData.results.find(vid => vid.type === 'Trailer' && vid.site === 'YouTube');
+                    setTrailer(trailerVideo || null);
+                }
+
+                setCrew(creators);
+
+                // Fetch Reviews from Firestore - Handled by Real-time Listener now
+                // setReviewsData(firestoreReviews);
+
+
+                if (detailsData.seasons) {
+                    setSeasonsValues(detailsData.seasons.filter(s => s.season_number > 0)); // Skip Specials (S0) usually
+                }
+
+                checkUser(detailsData.id);
+                // Don't set loading false yet if we want to wait for episodes, but for perceived perf, maybe separate?
+                // Let's just fetch season 1 default immediately if exists
+                if (detailsData.seasons && detailsData.seasons.length > 0) {
+                    const seasonToFetch = seasonNumber ? parseInt(seasonNumber) : 1;
+                    setSelectedSeason(seasonToFetch); // Ensure state sync
+                    fetchSeasonEpisodes(detailsData.id, seasonToFetch, detailsData.name);
+                } else {
+                    setLoading(false);
+                }
+            } catch (error) {
+                console.error("Failed to fetch details", error);
+                setLoading(false);
+            }
+        };
+        fetchData();
+    }, [id]);
+
+    const [seasonDetails, setSeasonDetails] = useState(null);
+
+    const fetchSeasonEpisodes = async (seriesId, seasonNum, seriesNameOverride = null) => {
+        try {
+            const [res, videosRes] = await Promise.all([
+                fetch(`${TMDB_BASE_URL}/tv/${seriesId}/season/${seasonNum}?api_key=${TMDB_API_KEY}`),
+                fetch(`${TMDB_BASE_URL}/tv/${seriesId}/season/${seasonNum}/videos?api_key=${TMDB_API_KEY}`)
+            ]);
+
+            const data = await res.json();
+            const videosData = await videosRes.json();
+
+            let episodes = data.episodes || [];
+
+            // OMDb Integration for Season Ratings
+            const nameToUse = seriesNameOverride || details?.name;
+            if (nameToUse) {
+                try {
+                    const omdbRes = await fetch(`https://www.omdbapi.com/?t=${encodeURIComponent(nameToUse)}&Season=${seasonNum}&apikey=15529774`);
+                    const omdbData = await omdbRes.json();
+
+                    if (omdbData.Response === "True" && omdbData.Episodes) {
+                        // Merge ratings
+                        episodes = episodes.map(ep => {
+                            const omdbEp = omdbData.Episodes.find(o => o.Episode === String(ep.episode_number));
+                            return omdbEp ? { ...ep, omdbRating: omdbEp.imdbRating } : ep;
+                        });
+                    }
+                } catch (e) {
+                    console.warn("OMDb Season fetch failed", e);
+                }
+            }
+
+            setEpisodes(episodes);
+            setSeasonDetails({ ...data, videos: videosData });
+
+            // Set Season Trailer if available
+            if (videosData?.results) {
+                const trailerVideo = videosData.results.find(vid => vid.type === 'Trailer' && vid.site === 'YouTube');
+                setTrailer(trailerVideo || null);
+            } else {
+                setTrailer(null);
+            }
+
+            setLoading(false);
+        } catch (err) {
+            console.error("Failed to fetch episodes", err);
+            setLoading(false);
+        }
+    };
+
+    const { confirm } = useNotification();
+
+    const checkAuth = async () => {
+        if (!currentUser) {
+            const isConfirmed = await confirm("You need to sign in to perform this action. Go to Sign In?", "Sign In Required", "Sign In", "Cancel");
+            if (isConfirmed) {
+                navigate('/login');
+            }
+            return false;
+        }
+        return true;
+    };
+
+    const handleSeasonChange = (e) => {
+        const newSeason = parseInt(e.target.value);
+        setSelectedSeason(newSeason);
+        fetchSeasonEpisodes(id, newSeason);
+    };
+
+    // Sync User State from Firestore (Season Aware)
+    useEffect(() => {
+        if (currentUser && details) {
+            const syncUserState = async () => {
+                const userRef = doc(db, 'users', currentUser.uid);
+                const userSnap = await getDoc(userRef);
+                if (userSnap.exists()) {
+                    const data = userSnap.data();
+
+                    // Check Season specific state if season > 0 (assuming implicit S1 is treated as Season 1)
+                    // We use selectedSeason to check.
+                    const isSeasonItem = (i) => i.id === details.id && i.isSeason && i.seasonNumber === selectedSeason;
+                    const isSeriesItem = (i) => i.id === details.id && !i.isEpisode && !i.isSeason;
+
+                    // Watchlist: Check if THIS season (or series if fallback) is in watchlist
+                    // User request: "change all... to season". 
+                    setInWatchlist(data.watchlist?.some(i => i.seriesId === details.id && i.isSeason && i.seasonNumber === selectedSeason) || false);
+
+                    // Like
+                    setIsLiked(data.likes?.some(i => i.seriesId === details.id && i.isSeason && i.seasonNumber === selectedSeason) || false);
+
+                    // Watched
+                    setIsWatched(data.watched?.some(i => i.seriesId === details.id && i.isSeason && i.seasonNumber === selectedSeason) || false);
+
+                    // Sync Episode States
+                    const watchedEps = data.watched?.filter(i => i.seriesId === details.id && i.isEpisode).map(i => i.id) || [];
+                    setEpisodeWatchedIDs(watchedEps);
+
+                    const watchlistEps = data.watchlist?.filter(i => i.seriesId === details.id && i.isEpisode).map(i => i.id) || [];
+                    setEpisodeWatchlistIDs(watchlistEps);
+                }
+            };
+            syncUserState();
+        }
+    }, [currentUser, details, selectedSeason]);
+
+    // Legacy checkUser removed as it used localStorage
+    const checkUser = (tmdbId) => {
+        // Kept empty to prevent errors if called elsewhere in legacy code flow
+    };
+
+    const toggleWatchlist = async () => {
+        if (!currentUser) return;
+        const userRef = doc(db, 'users', currentUser.uid);
+
+        // Define Season Item
+        const seasonItem = {
+            id: `${details.id}-S${selectedSeason}`, // Unique ID for finding in array (optional, or just rely on properties)
+            seriesId: details.id,
+            name: `${details.name} (Season ${selectedSeason})`,
+            poster_path: seasonDetails?.poster_path || details.poster_path, // Use season poster
+            vote_average: details.vote_average, // Or season rating if we had it
+            first_air_date: seasonDetails?.air_date || details.first_air_date,
+            type: 'season',
+            isSeason: true,
+            seasonNumber: selectedSeason,
+            date: new Date().toISOString()
+        };
+
+        // Define Episode Items for Bulk Add/Remove
+        const seasonPoster = seasonDetails?.poster_path || details.poster_path;
+        const episodeItems = episodes.map(ep => ({
+            id: ep.id,
+            name: `${details.name} - S${ep.season_number}E${ep.episode_number}: ${ep.name}`,
+            poster_path: details.poster_path, // Keep Series Poster as main lookup
+            seasonPoster: seasonPoster,
+            still_path: ep.still_path,
+            backdrop_path: ep.still_path,
+            vote_average: ep.vote_average,
+            first_air_date: ep.air_date,
+            type: 'episode',
+            isEpisode: true,
+            seriesId: details.id,
+            seasonNumber: ep.season_number,
+            episodeNumber: ep.episode_number,
+            date: new Date().toISOString()
+        }));
+
+        if (inWatchlist) {
+            const userSnap = await getDoc(userRef);
+            if (userSnap.exists()) {
+                const data = userSnap.data();
+                // Filter out Season Item AND All Episodes of this season
+                const newWatchlist = data.watchlist.filter(i => {
+                    const isTargetSeason = i.seriesId === details.id && i.seasonNumber === selectedSeason && i.isSeason;
+                    const isTargetEpisode = i.seriesId === details.id && i.seasonNumber === selectedSeason && i.isEpisode;
+                    return !isTargetSeason && !isTargetEpisode;
+                });
+                await updateDoc(userRef, { watchlist: newWatchlist });
+            }
+            // Update Local State: Remove IDs of current season episodes
+            setEpisodeWatchlistIDs(prev => prev.filter(id => !episodes.some(e => e.id === id)));
+        } else {
+            // Add Season Item AND All Episodes
+            const itemsToAdd = [seasonItem, ...episodeItems];
+            await updateDoc(userRef, {
+                watchlist: arrayUnion(...itemsToAdd)
+            });
+            // Update Local State: Add IDs
+            setEpisodeWatchlistIDs(prev => [...new Set([...prev, ...episodes.map(e => e.id)])]);
+        }
+        setInWatchlist(!inWatchlist);
+    };
+
+    const toggleLike = async () => {
+        if (!currentUser) return;
+        const userRef = doc(db, 'users', currentUser.uid);
+        const itemToSave = {
+            id: `${details.id}-S${selectedSeason}`,
+            seriesId: details.id,
+            name: `${details.name} (Season ${selectedSeason})`,
+            poster_path: seasonDetails?.poster_path || details.poster_path,
+            vote_average: details.vote_average,
+            first_air_date: seasonDetails?.air_date || details.first_air_date,
+            type: 'season',
+            isSeason: true,
+            seasonNumber: selectedSeason,
+            date: new Date().toISOString()
+        };
+
+        if (isLiked) {
+            const userSnap = await getDoc(userRef);
+            if (userSnap.exists()) {
+                const data = userSnap.data();
+                const newLikes = data.likes.filter(i => !(i.seriesId === details.id && i.seasonNumber === selectedSeason && i.isSeason));
+                await updateDoc(userRef, { likes: newLikes });
+            }
+        } else {
+            await updateDoc(userRef, {
+                likes: arrayUnion(itemToSave)
+            });
+        }
+        setIsLiked(!isLiked);
+    };
+
+    // Watched Logic
+    const [isWatched, setIsWatched] = useState(false);
+
+    useEffect(() => {
+        if (details) {
+            checkWatched(details.id);
+        }
+    }, [details]);
+
+    const checkWatched = (tmdbId) => {
+        // Handled by syncUserState effect
+    };
+
+    const toggleWatched = async () => {
+        if (!currentUser) return;
+        const userRef = doc(db, 'users', currentUser.uid);
+        const itemToSave = {
+            id: `${details.id}-S${selectedSeason}`,
+            seriesId: details.id,
+            name: `${details.name} (Season ${selectedSeason})`,
+            poster_path: seasonDetails?.poster_path || details.poster_path,
+            vote_average: details.vote_average,
+            first_air_date: seasonDetails?.air_date || details.first_air_date,
+            type: 'season',
+            isSeason: true,
+            seasonNumber: selectedSeason,
+            date: new Date().toISOString()
+        };
+
+        if (isWatched) {
+            const userSnap = await getDoc(userRef);
+            if (userSnap.exists()) {
+                const data = userSnap.data();
+                const newWatched = data.watched.filter(i => !(i.seriesId === details.id && i.seasonNumber === selectedSeason && i.isSeason));
+                await updateDoc(userRef, { watched: newWatched });
+            }
+        } else {
+            await updateDoc(userRef, {
+                watched: arrayUnion(itemToSave)
+            });
+        }
+        setIsWatched(!isWatched);
+    };
+
+    // Removed addToWatched helper as it's merged or unnecessary with direct FS calls
+
+    // Episode Watchlist Logic
+    const [episodeWatchlistIDs, setEpisodeWatchlistIDs] = useState([]);
+    const [episodeWatchedIDs, setEpisodeWatchedIDs] = useState([]);
+
+    useEffect(() => {
+        const watchlist = JSON.parse(localStorage.getItem('watchlist') || '[]');
+        setEpisodeWatchlistIDs(watchlist.filter(i => i.isEpisode).map(i => i.id));
+
+        const watched = JSON.parse(localStorage.getItem('watched') || '[]');
+        setEpisodeWatchedIDs(watched.filter(i => i.isEpisode).map(i => i.id));
+    }, []);
+
+    const checkEpisodeInWatchlist = (epId) => {
+        return episodeWatchlistIDs.includes(epId);
+    };
+
+    const checkEpisodeWatched = (epId) => {
+        return episodeWatchedIDs.includes(epId);
+    };
+
+    const toggleEpisodeWatched = async (episode) => {
+        if (!currentUser) return;
+        const userRef = doc(db, 'users', currentUser.uid);
+        const itemToSave = {
+            id: episode.id,
+            episodeId: episode.id,
+            seriesId: details.id,
+            name: details.name, // Main name is Series name
+            episodeName: episode.name,
+            poster_path: details.poster_path,
+            still_path: episode.still_path,
+            vote_average: episode.vote_average,
+            first_air_date: episode.air_date,
+            type: 'episode',
+            date: new Date().toISOString(),
+            isEpisode: true,
+            seasonNumber: episode.season_number,
+            episodeNumber: episode.episode_number
+        };
+
+        try {
+            if (checkEpisodeWatched(episode.id)) {
+                // Remove
+                const userSnap = await getDoc(userRef);
+                if (userSnap.exists()) {
+                    const data = userSnap.data();
+                    const newWatched = data.watched.filter(i => i.id !== episode.id);
+                    // Also potentially remove milestones? (Too complex to revert completion logic for now, let's keep it simple: milestones stay)
+                    await updateDoc(userRef, { watched: newWatched });
+                }
+                setEpisodeWatchedIDs(prev => prev.filter(id => id !== episode.id));
+            } else {
+                // Add
+                // 1. Update Watched List
+                // We need to fetch current list to calculate completion accurately
+                const userSnap = await getDoc(userRef);
+                let currentWatched = [];
+                let currentAchievements = [];
+                let currentStarSeries = [];
+
+                if (userSnap.exists()) {
+                    const data = userSnap.data();
+                    currentWatched = data.watched || [];
+                    currentAchievements = data.achievements || [];
+                    currentStarSeries = data.starSeries || [];
+                }
+
+                // Add new item locally for calculation
+                const updatedWatched = [...currentWatched, itemToSave];
+
+                // 2. Check Season Completion
+                const season = seasonsValues.find(s => s.season_number === episode.season_number);
+                let newAchievements = [];
+                let newStarSeries = [];
+
+                if (season) {
+                    const watchedInSeason = updatedWatched.filter(w => w.seriesId === details.id && w.seasonNumber === episode.season_number);
+                    if (watchedInSeason.length >= season.episode_count) {
+                        // Season Completed!
+                        const achievementId = `${details.id}-S${episode.season_number}-COMPLETED`;
+                        if (!currentAchievements.some(a => a.id === achievementId)) {
+                            newAchievements.push({
+                                id: achievementId,
+                                seriesId: details.id,
+                                name: details.name,
+                                seasonNumber: episode.season_number,
+                                type: 'season_finish',
+                                date: new Date().toISOString(),
+                                poster_path: details.poster_path
+                            });
+                        }
+                    }
+                }
+
+                // 3. Check Series Completion
+                // Deduplicate by episode ID to be sure
+                const uniqueWatchedIDs = new Set(updatedWatched.filter(w => w.seriesId === details.id).map(w => w.id));
+                // Note: details.number_of_episodes is total.
+                if (uniqueWatchedIDs.size >= details.number_of_episodes) {
+                    // Series Completed!
+                    const seriesAchievementId = `${details.id}-SERIES-COMPLETED`;
+                    if (!currentAchievements.some(a => a.id === seriesAchievementId)) {
+                        newAchievements.push({
+                            id: seriesAchievementId,
+                            seriesId: details.id,
+                            name: details.name,
+                            type: 'series_finish',
+                            date: new Date().toISOString(),
+                            poster_path: details.poster_path
+                        });
+
+                        // Add to Star Series Table (Array)
+                        if (!currentStarSeries.some(s => s.id === details.id)) {
+                            newStarSeries.push({
+                                id: details.id,
+                                name: details.name,
+                                poster_path: details.poster_path,
+                                date: new Date().toISOString()
+                            });
+                        }
+                    }
+                }
+
+                // Commit Updates
+                const updatePayload = {
+                    watched: arrayUnion(itemToSave)
+                };
+                if (newAchievements.length > 0) updatePayload.achievements = arrayUnion(...newAchievements);
+                if (newStarSeries.length > 0) updatePayload.starSeries = arrayUnion(...newStarSeries);
+
+                await updateDoc(userRef, updatePayload);
+                setEpisodeWatchedIDs(prev => [...prev, episode.id]);
+            }
+        } catch (error) {
+            console.error("Error toggling watch:", error);
+        }
+    };
+
+    const toggleEpisodeWatchlist = async (episode) => {
+        if (!currentUser) return;
+        const userRef = doc(db, 'users', currentUser.uid);
+
+        // Find correct season poster
+        // We know 'seasonDetails' matches 'selectedSeason'. 
+        // If episode.season_number === selectedSeason, use seasonDetails.poster_path
+        const seasonPoster = (seasonDetails && seasonDetails.season_number === episode.season_number)
+            ? seasonDetails.poster_path
+            : null;
+
+        const itemToSave = {
+            id: episode.id,
+            name: `${details.name} - S${episode.season_number}E${episode.episode_number}: ${episode.name}`,
+            poster_path: details.poster_path, // Keep Series Poster as main lookup
+            seasonPoster: seasonPoster, // NEW: Specific Season Poster
+            still_path: episode.still_path,
+            backdrop_path: episode.still_path,
+            vote_average: episode.vote_average,
+            first_air_date: episode.air_date,
+            type: 'episode',
+            isEpisode: true,
+            seriesId: details.id,
+            seasonNumber: episode.season_number,
+            episodeNumber: episode.episode_number,
+            date: new Date().toISOString()
+        };
+
+        if (checkEpisodeInWatchlist(episode.id)) {
+            const userSnap = await getDoc(userRef);
+            if (userSnap.exists()) {
+                const data = userSnap.data();
+                const newWatchlist = data.watchlist.filter(i => i.id !== episode.id);
+                await updateDoc(userRef, { watchlist: newWatchlist });
+            }
+            setEpisodeWatchlistIDs(prev => prev.filter(id => id !== episode.id));
+        } else {
+            await updateDoc(userRef, {
+                watchlist: arrayUnion(itemToSave)
+            });
+            setEpisodeWatchlistIDs(prev => [...prev, episode.id]);
+        }
+    };
+
+
+
+    const handleReviewLike = async (reviewId) => {
+        if (!currentUser) return;
+
+        const review = reviewsData.find(r => r.id === reviewId);
+        if (!review) return;
+
+        const hasUserLikedReview = review.likes && review.likes.includes(currentUser.uid);
+        const userRef = doc(db, 'users', currentUser.uid);
+        const reviewRef = doc(db, 'reviews', reviewId);
+
+        try {
+            if (hasUserLikedReview) {
+                // Unlike: Remove UID from review.likes
+                await updateDoc(reviewRef, { likes: arrayRemove(currentUser.uid) });
+
+                // Remove from User Activity (Read-Modify-Write for safe object removal)
+                const userSnap = await getDoc(userRef);
+                if (userSnap.exists()) {
+                    const userData = userSnap.data();
+                    const newLikes = (userData.likes || []).filter(l => !(l.type === 'like_review' && l.reviewId === reviewId));
+                    await updateDoc(userRef, { likes: newLikes });
+                }
+
+                // Update Local State
+                setReviewsData(prev => prev.map(r => {
+                    if (r.id === reviewId) {
+                        return { ...r, likes: (r.likes || []).filter(uid => uid !== currentUser.uid) };
+                    }
+                    return r;
+                }));
+
+            } else {
+                // Like: Add UID to review.likes
+                await updateDoc(reviewRef, { likes: arrayUnion(currentUser.uid) });
+
+                // Add to User Activity
+                const activityItem = {
+                    type: 'like_review',
+                    reviewId: review.id,
+                    targetUserId: review.userId,
+                    targetUsername: review.userName || review.author || 'User',
+                    seriesId: details.id,
+                    name: details.name, // Series Name
+                    seasonNumber: review.seasonNumber,
+                    episodeNumber: review.episodeNumber,
+                    poster_path: details.poster_path,
+                    seasonPoster: seasonDetails?.poster_path,
+                    date: new Date().toISOString()
+                };
+                await updateDoc(userRef, { likes: arrayUnion(activityItem) });
+
+                // Update Local State
+                setReviewsData(prev => prev.map(r => {
+                    if (r.id === reviewId) {
+                        return { ...r, likes: [...(r.likes || []), currentUser.uid] };
+                    }
+                    return r;
+                }));
+            }
+        } catch (error) {
+            console.error("Error toggling review like:", error);
+        }
+    };
+
+
+
+    // Get existing review for an item
+    const getExistingReview = (itemId, isEpisode = false) => {
+        if (!currentUser) return null;
+        if (isEpisode) {
+            return reviewsData.find(r => r.episodeId === itemId && r.isEpisode && r.userId === currentUser.uid);
+        } else {
+            // Check for Season Review based on seasonNumber if available
+            return reviewsData.find(r => r.tmdbId === itemId && !r.isEpisode && r.seasonNumber === selectedSeason && r.userId === currentUser.uid);
+        }
+    };
+
+    const openEpisodeReview = (ep) => {
+        const existing = getExistingReview(ep.id, true);
+        setReviewingItem(ep);
+        setExistingReviewData(existing ? { rating: existing.rating, review: existing.review } : null);
+        setIsReviewOpen(true);
+    };
+
+
+
+    const handleAction = async (actionFn) => {
+        await actionFn();
+    };
+
+    const handleReviewSubmit = async ({ rating, review }) => {
+        if (!currentUser) return;
+
+        const isEpisode = reviewingItem !== 'series' && !!reviewingItem?.episode_number;
+
+        // NEW FLOW: Removed Popup Interception as requested.
+        // Direct Save.
+
+        const episodeIdTarget = isEpisode ? reviewingItem.id : null;
+
+        // Construct Review Data
+        const reviewDataPayload = {
+            userId: currentUser.uid,
+            userName: currentUser.email?.split('@')[0] || 'User',
+            tmdbId: parseInt(id),
+            name: isEpisode ? `${details.name} (S${reviewingItem.season_number}E${reviewingItem.episode_number})` : details.name,
+            poster_path: details.poster_path, // Series poster usually used
+            rating: parseFloat(rating),
+            review: review,
+            updatedAt: new Date().toISOString(),
+            type: type,
+            isEpisode: isEpisode,
+            seasonNumber: isEpisode ? reviewingItem.season_number : null,
+            episodeNumber: isEpisode ? reviewingItem.episode_number : null,
+            episodeId: episodeIdTarget
+        };
+
+        try {
+            // Check for existing review explicitly
+            let existingDocId = null;
+            const existingReview = reviewsData.find(r =>
+                r.userId === currentUser.uid &&
+                r.tmdbId === parseInt(id) &&
+                r.isEpisode === isEpisode &&
+                (isEpisode ? r.episodeId === episodeIdTarget : true)
+            );
+
+            if (existingReview) {
+                existingDocId = existingReview.id;
+            } else {
+                // Double check Firestore if not found in local state (paranoid check)
+                const q = query(
+                    collection(db, 'reviews'),
+                    where('userId', '==', currentUser.uid),
+                    where('tmdbId', '==', parseInt(id)),
+                    where('isEpisode', '==', isEpisode)
+                );
+                const snap = await getDocs(q);
+                const match = snap.docs.find(d => isEpisode ? d.data().episodeId === episodeIdTarget : true);
+                if (match) existingDocId = match.id;
+            }
+
+            if (existingDocId) {
+                // Update
+                const reviewRef = doc(db, 'reviews', existingDocId);
+                await updateDoc(reviewRef, {
+                    ...reviewDataPayload,
+                    // Preserve createdAt, likes
+                });
+
+                // Update Local
+                setReviewsData(prev => prev.map(r => r.id === existingDocId ? { ...r, ...reviewDataPayload } : r));
+
+                setIsReviewOpen(false);
+
+                // SUCCESS FLOW (Silent Badge Add)
+                if (!isEpisode) {
+                    const userRef = doc(db, 'users', currentUser.uid);
+                    await updateDoc(userRef, {
+                        starSeries: arrayUnion({
+                            id: details.id,
+                            name: details.name,
+                            poster_path: details.poster_path,
+                            date: new Date().toISOString()
+                        })
+                    });
+                    // setShowStarBadge(true); // Removed
+                }
+
+            } else {
+                // Create New
+                const newDocRef = await addDoc(collection(db, 'reviews'), {
+                    ...reviewDataPayload,
+                    createdAt: new Date().toISOString(),
+                    likes: []
+                });
+
+                // Mark as Watched Logic (Firestore)
+                if (!isEpisode) {
+                    const userRef = doc(db, 'users', currentUser.uid);
+                    const userSnap = await getDoc(userRef);
+                    if (userSnap.exists()) {
+                        const data = userSnap.data();
+
+                        // Robust Duplication Check: Check by ID
+                        const isAlreadyInWatched = data.watched?.some(w => String(w.id) === String(details.id));
+
+                        if (!isAlreadyInWatched) {
+                            const itemToSave = {
+                                id: details.id,
+                                name: details.name,
+                                poster_path: details.poster_path,
+                                vote_average: details.vote_average,
+                                first_air_date: details.first_air_date,
+                                type: type,
+                                date: new Date().toISOString()
+                            };
+                            await updateDoc(userRef, {
+                                watched: arrayUnion(itemToSave)
+                            });
+                            setIsWatched(true);
+                        }
+                    }
+                }
+
+                // Update Local
+                setReviewsData(prev => [...prev, { ...reviewDataPayload, id: newDocRef.id, likes: [], createdAt: new Date().toISOString() }]);
+
+                setIsReviewOpen(false);
+
+                // SUCCESS FLOW (Silent Badge Add)
+                if (!isEpisode) {
+                    const userRef = doc(db, 'users', currentUser.uid);
+                    await updateDoc(userRef, {
+                        starSeries: arrayUnion({
+                            id: details.id,
+                            name: details.name,
+                            poster_path: details.poster_path,
+                            date: new Date().toISOString()
+                        })
+                    });
+                    // setShowStarBadge(true); // Removed
+                }
+            }
+
+        } catch (error) {
+            console.error("Error saving review: ", error);
+        }
+    };
+
+    if (loading) return <div className="loading">Loading...</div>;
+    if (!details) return <div className="loading">Not found</div>;
+
+    const title = details.name;
+    const date = details.first_air_date;
+    const year = date ? date.split('-')[0] : 'N/A';
+    const backdropUrl = `https://image.tmdb.org/t/p/original${details.backdrop_path}`;
+    // Use Season Poster if seasonDetails exists (and matches selectedSeason, implicit via fetch)
+    const displayPosterPath = seasonDetails?.poster_path || details.poster_path;
+    const posterUrl = `https://image.tmdb.org/t/p/w500${displayPosterPath}`;
+
+    const getSeasonName = (seasonNum) => {
+        const season = seasonsValues.find(s => s.season_number === seasonNum);
+        return season && season.name ? season.name : `Season ${seasonNum}`;
+    };
+
+    const getCurrentSeasonRating = () => {
+        const seasonReviews = reviewsData.filter(r => r.tmdbId === parseInt(id) && r.seasonNumber === selectedSeason && r.isEpisode);
+        if (seasonReviews.length === 0) return { avg: "0.0", count: 0 };
+        const sum = seasonReviews.reduce((acc, r) => acc + (parseFloat(r.rating) || 0), 0);
+        return { avg: (sum / seasonReviews.length).toFixed(1), count: seasonReviews.length };
+    };
+    const seasonStats = getCurrentSeasonRating(); // Using this name as per existing or new? Existing was just vote_average return. I'll replace it to return object.
+
+    const getEmoji = (val) => {
+        const iconStyle = { color: 'black', fontSize: '1.4rem' }; // Black drawing
+        const bgStyle = {
+            background: '#FFCC00', // Yellow face
+            borderRadius: '4px', // SQUARE BORDER
+            width: '28px',
+            height: '28px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            // border: '2px solid black' // Removed border as simple yellow circle with black face looks cleaner like emoji
+        };
+
+        // Custom Logic based on Image (Happy, Neutral, Sad)
+        // 5 faces in image? user asked for "emojies like that photo".
+        // I will stick to 3 for now, mapped to 0-10 scale.
+        // >= 7: Happy
+        // 4-6: Neutral
+        // < 4: Sad
+
+        let Icon = MdSentimentVeryDissatisfied;
+        if (val >= 7) Icon = MdSentimentSatisfiedAlt;
+        else if (val >= 4) Icon = MdSentimentNeutral;
+
+        return (
+            <div style={bgStyle}>
+                <Icon style={iconStyle} />
+            </div>
+        );
+    };
+
+
+
+    return (
+        <div className="movie-details-container">
+            {/* Star Badge Prompt */}
+            {details && (
+                <StarBadger
+                    isOpen={showStarBadge}
+                    onClose={() => handleStarBadgeComplete(false)}
+                    user={currentUser}
+                    series={details}
+                    onComplete={() => handleStarBadgeComplete(true)} // Pass true on success
+                />
+            )}
+
+            <div
+                className="backdrop-overlay"
+                style={{
+                    backgroundImage: `linear-gradient(to top, #000000 10%, transparent 90%), url(${backdropUrl})`,
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '60vh',
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    zIndex: -1,
+                    opacity: 0.3
+                }}
+            />
+
+            <div className="details-content" style={{ marginTop: '5vh', width: '100%', maxWidth: '1000px', margin: '5vh auto 0', padding: '0 1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', color: '#fff', position: 'relative', zIndex: 1 }}>
+
+                {/* VISUAL TITLE CARD BOX (Backdrop) with Logo & Fade */}
+                <div style={{
+                    width: '100%',
+                    maxWidth: '1000px', // Increased width (though 100% might be too wide, sticking to large container width)
+                    aspectRatio: '16/9',
+                    marginBottom: '-4rem', // Overlap effect
+                    position: 'relative',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: '#000', // Pure Black
+                    borderRadius: '0px',
+                    overflow: 'hidden'
+                }}>
+
+                    {/* LOGO OVERLAY (Only Logo, No Backdrop) */}
+                    <div style={{ zIndex: 2, display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%', height: '100%' }}>
+                        {details.images?.logos?.[0]?.file_path ? (
+                            <img
+                                src={`https://image.tmdb.org/t/p/original${details.images?.logos?.[0]?.file_path}`}
+                                alt="Series Logo"
+                                style={{ width: '70%', maxHeight: '70%', objectFit: 'contain', filter: 'drop-shadow(0 0 20px rgba(255,255,255,0.1))' }}
+                            />
+                        ) : (
+                            // Fallback if no logo
+                            <h2 style={{ fontSize: '4rem', fontFamily: 'Impact, sans-serif', textTransform: 'uppercase', color: '#333' }}>
+                                {title}
+                            </h2>
+                        )}
+                    </div>
+                </div>
+
+                {/* POSTER (Square Borders) */}
+                <div className="poster-wrapper" style={{ flexShrink: 0, zIndex: 3, marginBottom: '2rem' }}>
+                    <div style={{ position: 'relative', filter: 'drop-shadow(0 0 30px rgba(0,0,0,0.6))', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        {/* Watchlist Button Overlay */}
+
+
+                        {/* Star Badge if Earned (Prioritize Star Badge over just Review, or show Star Badge if user has it) */}
+                        {hasStarBadge && <PosterBadge />}
+
+                        <img
+                            src={posterUrl}
+                            alt={title}
+                            className="movie-poster"
+                            style={{
+                                width: '220px',
+                                height: '330px',
+                                objectFit: 'cover',
+                                borderRadius: '0px', // SQUARE BORDER
+                                border: '1px solid #333',
+                                position: 'relative', // Layering Fix
+                                zIndex: 1             // Ensure on top of badge
+                            }}
+                        />
+                    </div>
+                </div>
+
+                {/* INFO ROW: Title/Watch (Left) ---- Ratings (Right) */}
+                <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    width: '100%',
+                    maxWidth: '1000px', // Match top box width
+                    marginBottom: '2rem',
+                    flexWrap: 'wrap',
+                    gap: '30px'
+                }}>
+
+                    {/* LEFT: Title & Where to Watch */}
+                    <div style={{ flex: 1, minWidth: '350px', textAlign: 'left' }}>
+                        <h1 style={{ fontSize: '4.5rem', textTransform: 'uppercase', fontWeight: '900', margin: '0 0 1rem 0', fontFamily: 'Impact, Inter, sans-serif', letterSpacing: '1px', lineHeight: '0.9' }}>
+                            {title}
+                        </h1>
+
+                        {/* Where to Watch */}
+                        <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', marginTop: '15px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '1rem', fontWeight: 'bold', color: '#888', textTransform: 'uppercase', marginRight: '10px' }}>Where to Watch:</span>
+                            {watchProviders?.flatrate || watchProviders?.rent || watchProviders?.buy ? (
+                                (watchProviders.flatrate || watchProviders.rent || watchProviders.buy || []).slice(0, 3).map(provider => (
+                                    <div key={provider.provider_id} title={provider.provider_name}>
+                                        <img
+                                            src={`https://image.tmdb.org/t/p/original${provider.logo_path}`}
+                                            alt={provider.provider_name}
+                                            style={{ width: '45px', height: '45px', borderRadius: '8px', border: '1px solid #444' }}
+                                        />
+                                    </div>
+                                ))
+                            ) : (
+                                <span style={{ fontSize: '1rem', color: '#555', alignSelf: 'center' }}>Unavailable</span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* RIGHT: Ratings Pill -> Emoji Badge */}
+                    <div style={{ flexShrink: 0, alignSelf: 'center' }}>
+                        <div
+                            onClick={() => setIsReviewsOpen(true)}
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: '10px',
+                                background: 'rgba(0,0,0,0.6)', padding: '8px 20px',
+                                borderRadius: '50px', border: '1px solid #333',
+                                cursor: 'pointer'
+                            }}>
+                            <span style={{ fontSize: '2rem', lineHeight: 1 }}>
+                                {seasonStats.count === 0 ? getEmoji(0) : getEmoji(parseFloat(seasonStats.avg))}
+                            </span>
+                            <span style={{ color: '#46d369', fontSize: '1.5rem', fontWeight: '900', fontFamily: 'Inter, sans-serif' }}>
+                                {seasonStats.avg}
+                            </span>
+                        </div>
+                    </div>
+
+                </div>
+
+                {/* Action Bar (Redesigned) */}
+                <div className="action-bar" style={{
+                    display: 'flex',
+                    gap: '0',
+                    borderTop: '2px solid #555',
+                    borderBottom: '2px solid #555',
+                    padding: '20px 0', // Increased padding
+                    width: '100%',
+                    justifyContent: 'center',
+                    flexWrap: 'wrap',
+                    background: '#000',
+                    marginBottom: '3rem'
+                }}>
+                    <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', flexWrap: 'nowrap', overflowX: 'auto' }}>
+                        {/* REVIEW */}
+                        {/* REVIEW */}
+
+
+                        {/* Star Badge Popup */}
+
+
+                        {/* SHARE (Only if Reviewed) */}
+                        {userSeriesReview && (
+                            <button
+                                className="action-btn-responsive"
+                                onClick={() => handleAction(async () => {
+                                    handleShare(userSeriesReview);
+                                })}
+                                style={{
+                                    background: '#FFCC00',
+                                    color: '#000',
+                                    border: '2px solid #FFCC00',
+                                    padding: '12px 30px',
+                                    fontSize: '1.1rem',
+                                    fontWeight: '900',
+                                    cursor: 'pointer',
+                                    textTransform: 'uppercase',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '10px',
+                                    borderRadius: '0px',
+                                    outline: 'none',
+                                    position: 'relative',
+                                    overflow: 'hidden',
+                                    zIndex: 1,
+                                    transition: 'all 0.3s ease'
+                                }}
+                            >
+                                <MdIosShare size={20} /> SHARE
+                            </button>
+                        )}
+
+                        {/* LIKE */}
+                        <button
+                            className="action-btn-responsive"
+                            onClick={() => handleAction(async () => {
+                                if (!(await checkAuth())) return;
+                                toggleLike();
+                            })}
+                            style={{
+                                background: isLiked ? '#fff' : '#FFCC00',
+                                color: '#000',
+                                border: `2px solid ${isLiked ? '#fff' : '#FFCC00'}`,
+                                padding: '12px 30px',
+                                fontSize: '1.1rem',
+                                fontWeight: '900',
+                                cursor: 'pointer',
+                                textTransform: 'uppercase',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '10px',
+                                borderRadius: '0px',
+                                outline: 'none',
+                                position: 'relative',
+                                overflow: 'hidden',
+                                zIndex: 1,
+                                transition: 'all 0.3s ease'
+                            }}
+                        >
+                            {isLiked ? <MdFavorite size={20} /> : <MdFavoriteBorder size={20} />} LIKE
+                        </button>
+
+                        {/* SEASON REVIEW REMOVED */}
+
+                        {/* WATCHED */}
+                        <button
+                            className="action-btn-responsive"
+                            onClick={() => handleAction(async () => {
+                                if (!(await checkAuth())) return;
+                                toggleWatched();
+                            })}
+                            style={{
+                                background: isWatched ? '#fff' : '#FFCC00',
+                                color: '#000',
+                                border: `2px solid ${isWatched ? '#fff' : '#FFCC00'}`,
+                                padding: '12px 30px',
+                                fontSize: '1.1rem',
+                                fontWeight: '900',
+                                cursor: 'pointer',
+                                textTransform: 'uppercase',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '10px',
+                                borderRadius: '0px',
+                                outline: 'none',
+                                position: 'relative',
+                                overflow: 'hidden',
+                                zIndex: 1,
+                                transition: 'all 0.3s ease'
+                            }}
+                        >
+                            {isWatched ? <MdVisibility size={20} /> : <MdVisibilityOff size={20} />} WATCHED
+                        </button>
+
+                        <button
+                            className="action-btn-responsive"
+                            onClick={() => handleAction(async () => {
+                                if (!(await checkAuth())) return;
+                                toggleWatchlist();
+                            })}
+                            style={{
+                                background: inWatchlist ? '#fff' : '#FFCC00',
+                                color: '#000',
+                                border: `2px solid ${inWatchlist ? '#fff' : '#FFCC00'}`,
+                                padding: '12px 30px',
+                                fontSize: '1.1rem',
+                                fontWeight: '900',
+                                cursor: 'pointer',
+                                textTransform: 'uppercase',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '10px',
+                                borderRadius: '0px',
+                                outline: 'none',
+                                position: 'relative',
+                                overflow: 'hidden',
+                                zIndex: 1,
+                                transition: 'all 0.3s ease'
+                            }}
+                        >
+                            {inWatchlist ? <MdCheck size={20} /> : <MdAdd size={20} />} WATCHLIST
+                        </button>
+                    </div>
+                </div>
+
+                {/* Overview (Redesigned) */}
+                <div className="overview" style={{ textAlign: 'center', maxWidth: '800px', margin: '0 auto 2rem' }}>
+                    <h3 style={{ borderBottom: '1px solid #333', paddingBottom: '0.5rem', marginBottom: '1rem', color: '#FFCC00' }}>
+                        {seasonDetails && seasonDetails.name ? seasonDetails.name : 'Overview'}
+                    </h3>
+                    <p style={{ lineHeight: '1.6', fontSize: '1.1rem', color: '#ddd' }}>
+                        {seasonDetails?.overview || details.overview || "No overview available."}
+                    </p>
+                </div>
+
+
+            </div >
+
+            {/* Episodes List - Full Width below? Or Sidebar? User image showed list. Let's put it full width below content OR in the main column. 
+                    Actually, let's put it in a separate container below the top section.
+                */}
+
+            < div className="episodes-wrapper" style={{ width: '100%', maxWidth: '1000px', margin: '0 auto' }}>
+
+
+
+                {/* Episodes List - Integrated in Info Column */}
+                < div style={{ marginTop: '2rem', marginBottom: '2rem' }}>
+                    <h3 style={{ color: '#FFCC00', borderBottom: '1px solid #333', paddingBottom: '0.5rem', marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        Episodes
+                        {seasonsValues.length > 0 && (
+                            <div style={{ display: 'flex', gap: '20px', alignItems: 'center', marginRight: '10px' }}>
+
+                                {/* Season Rating - IMDb Style Badge REMOVED */}
+                                {/*
+                                        (seasonDetails?.vote_average > 0 || getCurrentSeasonRating() > 0) && (
+                                            <div style={{ display: 'flex', alignItems: 'center', background: '#000', border: '1px solid #F5C518', borderRadius: '4px', padding: '4px 8px', marginRight: '15px' }}>
+                                                <span style={{ background: '#F5C518', color: 'black', fontWeight: '900', padding: '2px 4px', borderRadius: '2px', marginRight: '6px', fontSize: '0.8rem' }}>IMDb</span>
+                                                <span style={{ color: 'white', fontWeight: 'bold', fontSize: '1rem' }}>
+                                                    {(seasonDetails?.vote_average || getCurrentSeasonRating()).toFixed(1)}/10
+                                                </span>
+                                            </div>
+                                        )
+                                    */}
+
+                                <div style={{ position: 'relative' }}>
+                                    <button
+                                        onClick={() => setIsSeasonOpen(!isSeasonOpen)}
+                                        style={{
+                                            background: '#333', // Grey button bg
+                                            color: 'white', // White text
+                                            border: 'none',
+                                            padding: '8px 20px',
+                                            borderRadius: '4px',
+                                            fontSize: '1rem',
+                                            cursor: 'pointer',
+                                            outline: 'none',
+                                            fontWeight: 'bold', // "Amazon Prime Bold"
+                                            textTransform: 'uppercase',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '12px',
+                                            width: 'auto', // Auto width
+                                            minWidth: '150px', // Increased width
+                                            height: '40px',
+                                            justifyContent: 'space-between',
+                                            whiteSpace: 'nowrap' // No Newline
+                                        }}
+                                    >
+                                        {getSeasonName(selectedSeason)}
+                                        <MdKeyboardArrowDown
+                                            size={24}
+                                            style={{
+                                                transform: isSeasonOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                                                transition: 'transform 0.3s ease'
+                                            }}
+                                        />
+                                    </button>
+
+                                    {/* Dropdown / Overlay */}
+                                    <div
+                                        style={{
+                                            position: 'absolute',
+                                            top: 'calc(100% + 5px)', // Tighter spacing
+                                            left: 0,
+                                            width: '100%', // Match button width
+                                            minWidth: '150px',
+                                            background: '#000', // Pure Black
+                                            border: '1px solid #333',
+                                            borderRadius: '4px', // Slight rounding
+                                            boxShadow: '0 10px 40px rgba(0,0,0,0.8)',
+                                            zIndex: 100,
+                                            opacity: isSeasonOpen ? 1 : 0,
+                                            transform: isSeasonOpen ? 'translateY(0)' : 'translateY(-10px)',
+                                            pointerEvents: isSeasonOpen ? 'auto' : 'none',
+                                            transition: 'all 0.2s ease-out',
+                                            overflow: 'hidden',
+                                            maxHeight: '300px',
+                                            overflowY: 'auto'
+                                        }}
+                                    >
+                                        {seasonsValues.map(s => (
+                                            <div
+                                                key={s.id}
+                                                onClick={() => {
+                                                    handleSeasonChange({ target: { value: s.season_number } });
+                                                    setIsSeasonOpen(false);
+                                                }}
+                                                className="season-item"
+                                                style={{
+                                                    padding: '10px 20px',
+                                                    color: 'white',
+                                                    cursor: 'pointer',
+                                                    borderBottom: '1px solid #222',
+                                                    background: selectedSeason === s.season_number ? '#333' : 'transparent', // Grey for selected
+                                                    fontWeight: 'bold', // Bold Text
+                                                    textTransform: 'uppercase', // Full Capital
+                                                    transition: 'background 0.2s',
+                                                    whiteSpace: 'nowrap',
+                                                    fontSize: '0.9rem'
+                                                }}
+                                                onMouseEnter={(e) => {
+                                                    if (selectedSeason !== s.season_number) e.currentTarget.style.background = '#1a1a1a';
+                                                }}
+                                                onMouseLeave={(e) => {
+                                                    if (selectedSeason !== s.season_number) e.currentTarget.style.background = 'transparent';
+                                                }}
+                                            >
+                                                {s.name || `SEASON ${s.season_number}`}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {episodes.map(ep => {
+                            const epReviews = reviewsData.filter(r => r.tmdbId === parseInt(id) && r.seasonNumber === selectedSeason && r.episodeNumber === ep.episode_number && r.isEpisode);
+                            const epCount = epReviews.length;
+                            const epAvg = epCount > 0
+                                ? (epReviews.reduce((acc, r) => acc + (parseFloat(r.rating) || 0), 0) / epCount).toFixed(1)
+                                : "0.0";
+
+                            // User Rating (if any)
+                            const userReview = getExistingReview(ep.id, true);
+
+                            return (
+                                <div
+                                    key={ep.id}
+                                    onClick={() => navigate(`/tv/${id}/season/${selectedSeason}/episode/${ep.episode_number}`)}
+                                    style={{
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '10px',
+                                        padding: '20px 0',
+                                        borderBottom: '1px solid #333',
+                                        cursor: 'pointer',
+                                        transition: 'background 0.2s',
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                >
+                                    <div style={{ display: 'flex', gap: '25px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                                        {/* Poster Section with Centered Buttons */}
+                                        <div className="responsive-episode-img" style={{ width: '178px', minWidth: '178px', position: 'relative', flexShrink: 0 }}>
+                                            {ep.still_path ? (
+                                                <img
+                                                    src={`https://image.tmdb.org/t/p/w300${ep.still_path}`}
+                                                    alt={ep.name}
+                                                    style={{ width: '100%', borderRadius: '4px', height: '100px', objectFit: 'cover' }}
+                                                />
+                                            ) : (
+                                                <div style={{ width: '100%', height: '100px', borderRadius: '4px', border: '1px solid #333', background: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                </div>
+                                            )}
+                                            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', display: 'flex', gap: '8px', zIndex: 5 }}>
+                                                <button
+                                                    onClick={async (e) => {
+                                                        e.stopPropagation();
+                                                        if (!(await checkAuth())) return;
+                                                        toggleEpisodeWatchlist(ep);
+                                                    }}
+                                                    style={{
+                                                        background: 'rgba(0,0,0,0.7)',
+                                                        color: checkEpisodeInWatchlist(ep.id) ? '#FFCC00' : 'white',
+                                                        border: '1px solid rgba(255,255,255,0.2)',
+                                                        padding: '0',
+                                                        cursor: 'pointer',
+                                                        borderRadius: '50%',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        width: '36px',
+                                                        height: '36px',
+                                                        transition: 'all 0.2s'
+                                                    }}
+                                                    title={checkEpisodeInWatchlist(ep.id) ? "Remove from Watchlist" : "Add to Watchlist"}
+                                                >
+                                                    {checkEpisodeInWatchlist(ep.id) ? <MdRemove size={18} /> : <MdAdd size={18} />}
+                                                </button>
+                                                <button
+                                                    onClick={async (e) => {
+                                                        e.stopPropagation();
+                                                        if (!(await checkAuth())) return;
+                                                        toggleEpisodeWatched(ep);
+                                                    }}
+                                                    style={{
+                                                        background: 'rgba(0,0,0,0.7)',
+                                                        color: checkEpisodeWatched(ep.id) ? '#00e054' : 'white',
+                                                        border: '1px solid rgba(255,255,255,0.2)',
+                                                        padding: '0',
+                                                        cursor: 'pointer',
+                                                        borderRadius: '50%',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        width: '36px',
+                                                        height: '36px',
+                                                        transition: 'all 0.2s'
+                                                    }}
+                                                    title={checkEpisodeWatched(ep.id) ? "Mark as Unwatched" : "Mark as Watched"}
+                                                >
+                                                    {checkEpisodeWatched(ep.id) ? <MdVisibility size={18} /> : <MdVisibilityOff size={18} />}
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Content Column: Info, Overview, Actions */}
+                                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '200px' }}>
+                                            {/* Header Info */}
+                                            <div>
+                                                <h4 style={{ margin: 0, fontSize: '1.2rem', color: '#fff', fontWeight: 'bold' }}>
+                                                    {ep.episode_number}. {ep.name}
+                                                </h4>
+                                                <div style={{ color: '#999', fontSize: '0.95rem', marginTop: '4px', fontWeight: '500' }}>
+                                                    {ep.runtime ? `${Math.floor(ep.runtime / 60)}h ${ep.runtime % 60}m` : ''}
+                                                </div>
+                                            </div>
+
+                                            {/* Overview */}
+                                            <p style={{ color: '#ccc', fontSize: '0.95rem', lineHeight: '1.5', margin: '0', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                                                {ep.overview || "No overview available."}
+                                            </p>
+
+                                            {/* Bottom Actions Row */}
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginTop: '5px', flexWrap: 'wrap' }}>
+
+                                                {/* Episode Rating Badge */}
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#000', padding: '4px 10px', borderRadius: '4px', border: '1px solid #333' }}>
+                                                    <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>{getEmoji(parseFloat(epAvg))}</span>
+                                                    <span style={{ color: '#46d369', fontWeight: 'bold', fontSize: '1rem' }}>{epAvg}</span>
+                                                </div>
+
+                                                {/* Review Button */}
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        openEpisodeReview(ep);
+                                                    }}
+                                                    className="btn-secondary"
+                                                    style={{
+                                                        background: 'transparent',
+                                                        color: '#46d369',
+                                                        border: 'none',
+                                                        padding: '0',
+                                                        cursor: 'pointer',
+                                                        fontSize: '0.9rem',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '6px',
+                                                        fontWeight: 'bold',
+                                                        textTransform: 'uppercase'
+                                                    }}
+                                                >
+                                                    <MdRateReview size={16} /> {userReview ? `Rated (${userReview.rating})` : 'Review'}
+                                                </button>
+
+                                                {userReview && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleShare(userReview, true);
+                                                        }}
+                                                        style={{
+                                                            background: 'transparent',
+                                                            color: 'white',
+                                                            border: 'none',
+                                                            padding: '0',
+                                                            cursor: 'pointer',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            fontSize: '0.85rem',
+                                                            gap: '6px',
+                                                            fontWeight: 'bold',
+                                                            textTransform: 'uppercase'
+                                                        }}
+                                                    >
+                                                        <MdIosShare size={16} /> Share
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div >
+            </div >
+
+            {/* CAST & CREW */}
+            < div style={{ marginTop: '2rem' }}>
+                <h3 style={{ borderBottom: '1px solid #333', paddingBottom: '0.5rem', marginBottom: '1rem', color: '#FFCC00' }}>Cast & Crew</h3>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', marginBottom: '1rem' }}>
+                    {cast.map(actor => (
+                        <div key={actor.id} onClick={() => navigate(`/person/${actor.id}`)} style={{ textAlign: 'center', width: '80px', cursor: 'pointer' }}>
+                            <img
+                                src={actor.profile_path ? `https://image.tmdb.org/t/p/w200${actor.profile_path}` : 'https://via.placeholder.com/200x300/141414/FFFF00?text=?'}
+                                alt={actor.name}
+                                style={{ width: '100%', borderRadius: '0', border: '1px solid #333', height: '100px', objectFit: 'cover' }}
+                            />
+                            <div style={{ fontSize: '0.8rem', marginTop: '5px', color: '#ccc' }}>{actor.name}</div>
+                        </div>
+                    ))}
+                </div>
+                {
+                    crew.length > 0 && (
+                        <div style={{ fontSize: '0.9rem', color: '#bbb' }}>
+                            <strong>Created by:</strong> {crew.map(c => c.name).join(', ')}
+                        </div>
+                    )
+                }
+            </div >
+
+
+
+
+            {/* Hidden Story Card */}
+            < div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
+                {storyData && (
+                    <StoryCard
+                        ref={storyCardRef}
+                        movie={storyData.movie}
+                        rating={storyData.rating}
+                        review={storyData.review}
+                        user={storyData.user}
+                    />
+                )}
+            </div >
+
+            {
+                isGenerating && (
+                    <div style={{
+                        position: 'fixed', top: '20px', right: '20px',
+                        background: '#FFCC00', color: 'black', padding: '10px 20px',
+                        borderRadius: '4px', fontWeight: 'bold', zIndex: 9999,
+                        display: 'flex', alignItems: 'center', gap: '8px'
+                    }}>
+                        <div className="spinner" style={{ width: '16px', height: '16px', border: '2px solid black', borderTop: '2px solid transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                        Preparing Story...
+                        <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+                    </div>
+                )
+            }
+
+
+
+            <ReviewsDrawer
+                isOpen={isReviewsOpen}
+                onClose={() => setIsReviewsOpen(false)}
+                onLike={handleReviewLike}
+                currentUser={currentUser}
+                reviews={reviewsData
+                    .filter(r => r.seasonNumber === selectedSeason) // Filter by Selected Season
+                    .map(r => ({
+                        id: r.id,
+                        source: 'app',
+                        author: r.userName || 'User', // Firestore has userName
+                        rating: r.rating,
+                        review: r.review,
+                        date: r.createdAt,
+                        likes: r.likes || [],
+                        isLiked: r.likes?.includes(currentUser?.uid),
+                        userId: r.userId,
+                        photoURL: r.photoURL || null,
+                        episodeNumber: r.episodeNumber,
+                        isEpisode: r.isEpisode
+                    }))}
+                onDelete={async (id) => {
+                    if (!currentUser) return;
+                    try {
+                        // 1. Find Review
+                        const reviewToDelete = reviewsData.find(r => r.id === id);
+                        if (!reviewToDelete) return;
+
+                        // 2. Delete from Firestore
+                        await deleteDoc(doc(db, 'reviews', id));
+
+                        // 3. If Series Review -> Remove Star Badge
+                        if (!reviewToDelete.isEpisode) {
+                            const userRef = doc(db, 'users', currentUser.uid);
+                            const userSnap = await getDoc(userRef);
+                            if (userSnap.exists()) {
+                                const data = userSnap.data();
+                                const updatedStars = (data.starSeries || []).filter(s => String(s.id) !== String(details.id));
+                                await updateDoc(userRef, { starSeries: updatedStars });
+                            }
+                        }
+
+                        // 4. Update Local State
+                        setReviewsData(prev => prev.filter(r => r.id !== id));
+
+                    } catch (error) {
+                        console.error("Error deleting review:", error);
+                    }
+                }}
+                onShare={handleShare}
+                theme={{}}
+            />
+
+            <ShareModal
+                isOpen={shareModal.isOpen}
+                onClose={() => setShareModal({ ...shareModal, isOpen: false })}
+                imageUrl={shareModal.imageUrl}
+            />
+
+            {/* Review Modal */}
+            <ReviewModal
+                isOpen={isReviewOpen}
+                onClose={() => setIsReviewOpen(false)}
+                onSubmit={handleReviewSubmit}
+                initialRating={existingReviewData ? existingReviewData.rating : 5}
+                initialReview={existingReviewData ? existingReviewData.review : ''}
+                movieName={reviewingItem === 'series' ? title : (reviewingItem ? `${title}: Season ${selectedSeason} Episode ${reviewingItem.episode_number}` : title)}
+                modalTitle={reviewingItem !== 'series' && reviewingItem ? 'EPISODE REVIEW' : 'SERIES REVIEW'}
+            />
+        </div >
+    );
+};
+
+export default MovieDetails;

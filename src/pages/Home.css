@@ -1,0 +1,723 @@
+.home-container {
+  width: 100vw;
+  height: 100vh;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Segoe UI', 'Arial', sans-serif;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Lock body scroll */
+  transition: background-color 0.3s, color 0.3s;
+}
+
+/* Header Styles */
+.header {
+  width: 100%;
+  height: 70px;
+  background: var(--bg-primary);
+  /* Pure Dark */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 60px;
+  position: fixed;
+  top: 0;
+  z-index: 1000;
+  border-bottom: 1px solid var(--border-color);
+  transition: background-color 0.3s, border-color 0.3s;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 40px;
+}
+
+.logo {
+  font-size: 28px;
+  font-weight: 900;
+  color: var(--accent-color);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.header-nav {
+  display: flex;
+  gap: 20px;
+}
+
+.nav-link {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  transition: color 0.3s;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+}
+
+.nav-link:hover,
+.nav-link.active {
+  color: var(--accent-color);
+  font-weight: 700;
+}
+
+.header-right {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+
+.header-icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.header-icon-btn:hover {
+  color: var(--accent-color);
+  transform: scale(1.1);
+}
+
+/* Main Content */
+.main-content {
+  flex: 1;
+  padding-top: 0;
+  /* Handled by wrapper margin */
+  /* Offset for fixed header */
+  /* padding-bottom: 40px; removed to handle in scrollable-content */
+  display: flex;
+  flex-direction: column;
+}
+
+.content-wrapper {
+  display: flex;
+  flex: 1;
+  width: 100%;
+  height: calc(100vh - 70px);
+  /* Fill remaining height */
+  margin-top: 70px;
+  /* Offset for fixed header */
+  overflow: hidden;
+  /* container doesn't scroll, children do */
+}
+
+.left-sidebar {
+  width: 80px;
+  height: 100%;
+  background-color: var(--bg-primary);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  /* Centered icons when collapsed */
+  padding: 20px 0;
+  flex-shrink: 0;
+  transition: width 0.3s ease, background-color 0.3s, border-color 0.3s;
+  overflow: hidden;
+  /* Hide text when collapsed */
+  z-index: 50;
+}
+
+.left-sidebar:hover {
+  width: 240px;
+  align-items: flex-start;
+  /* Align left on expand */
+  padding-left: 20px;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  margin-top: 0;
+  /* Remove top margin */
+  width: 100%;
+  align-items: center;
+  /* Center items initially */
+  justify-content: center;
+  /* Ensure centered items */
+  flex: 1;
+}
+
+.left-sidebar:hover .sidebar-nav {
+  align-items: flex-start;
+  /* Align nav items left */
+}
+
+.sidebar-link {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.3s;
+  padding: 10px;
+  border-radius: 8px;
+  display: flex;
+  justify-content: flex-start;
+  /* Changed from center to accommodate text */
+  align-items: center;
+  width: auto;
+  /* Allow auto width */
+  height: 50px;
+  gap: 15px;
+  white-space: nowrap;
+}
+
+.sidebar-text {
+  opacity: 0;
+  display: none;
+  font-weight: 800;
+  /* Extra Bold */
+  font-size: 1rem;
+  transition: opacity 0.3s ease;
+  letter-spacing: 0.5px;
+}
+
+.left-sidebar:hover .sidebar-text {
+  display: inline-block;
+  opacity: 1;
+}
+
+.sidebar-link:hover {
+  color: var(--accent-color);
+}
+
+.sidebar-link.active {
+  color: var(--text-primary);
+}
+
+.footer-content {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 10px;
+  margin-top: auto;
+}
+
+.scrollable-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 40px;
+}
+
+/* Hero Section */
+.hero-section {
+  position: relative;
+  height: 85vh;
+  width: 100%;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.hero-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(to right, var(--bg-primary) 0%, rgba(0, 0, 0, 0.6) 40%, transparent 100%),
+    linear-gradient(to top, var(--bg-primary) 0%, transparent 20%);
+}
+
+.hero-content {
+  position: relative;
+  z-index: 10;
+  padding-left: 60px;
+  max-width: 600px;
+}
+
+.hero-title {
+  font-size: 64px;
+  font-weight: 900;
+  line-height: 1.1;
+  margin-bottom: 20px;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.hero-meta {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 20px;
+  font-size: 16px;
+  color: var(--accent-color);
+  font-weight: 600;
+}
+
+.hero-description {
+  font-size: 18px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin-bottom: 30px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.hero-buttons {
+  display: flex;
+  gap: 15px;
+}
+
+.btn {
+  padding: 12px 30px;
+  border-radius: 4px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: none;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background-color: var(--accent-color);
+  color: #000000;
+  /* Use var if we want text to flip, but accent usually expects black text on yellow */
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+}
+
+.btn-secondary {
+  background-color: rgba(109, 109, 110, 0.7);
+  color: #FFFFFF;
+  /* Fix this if tertiary bg? */
+}
+
+.btn-secondary:hover {
+  background-color: rgba(109, 109, 110, 0.4);
+}
+
+/* Rows / Sections */
+.section {
+  padding: 20px 0 20px 60px;
+  margin-bottom: 10px;
+}
+
+.section-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 15px;
+  display: flex;
+  align-items: center;
+}
+
+.series-row {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 20px 60px 40px 60px;
+  /* Increased top/bottom padding for hover scale */
+  scroll-behavior: smooth;
+  touch-action: pan-x;
+  /* Strict Horizontal Scroll / Lock Vertical */
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.series-row::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.series-row {
+  -ms-overflow-style: none;
+  /* IE and Edge */
+  scrollbar-width: none;
+  /* Firefox */
+}
+
+.series-card {
+  width: 100%;
+  height: auto;
+  background-color: transparent;
+  border-radius: 4px;
+  /* Slight rounding like Netflix */
+  overflow: visible;
+  cursor: pointer;
+  transition: transform 0.3s;
+  position: relative;
+  border: none;
+  flex-shrink: 0;
+}
+
+.series-card:hover {
+  transform: scale(1.15);
+  /* Smooth expansion */
+  z-index: 100 !important;
+  box-shadow: 0 10px 30px var(--card-shadow);
+}
+
+
+.series-poster {
+  width: 100%;
+  aspect-ratio: 16/9;
+  /* Landscape ratio */
+  object-fit: cover;
+  border-radius: 4px;
+  border: none;
+  display: block;
+}
+
+.series-card:hover .series-poster {
+  border-color: var(--accent-color);
+}
+
+.series-info {
+  margin-top: 10px;
+}
+
+.series-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-primary);
+}
+
+.series-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.series-rating {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent-color);
+  font-weight: 600;
+}
+
+.series-year {
+  color: var(--text-muted);
+}
+
+/* Footer (Simple attribution, no fixed nav) - REMOVED replaced by sidebar */
+
+/* Loading State */
+.loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  font-size: 24px;
+  color: var(--accent-color);
+  font-weight: 600;
+}
+
+/* Responsive */
+.series-card-container {
+  width: 280px;
+  flex: 0 0 auto;
+  transition: width 0.3s;
+}
+
+@media (max-width: 768px) {
+
+  /* Header Adjustments */
+  .header {
+    padding: 0 15px;
+    height: 60px;
+  }
+
+  .header-icon-btn {
+    font-size: 24px;
+    /* Larger touch targets */
+  }
+
+  /* Mobile Content Wrapper */
+  .content-wrapper {
+    margin-top: 60px;
+    /* Match header height */
+    height: calc(100vh - 60px);
+    /* Adjust height */
+    flex-direction: column;
+    /* Stack if needed, but we keep generic structure */
+  }
+
+  /* Transform Sidebar to Bottom Nav */
+  .left-sidebar {
+    width: 100%;
+    height: 60px;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    flex-direction: row;
+    border-right: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.95);
+    backdrop-filter: blur(10px);
+    z-index: 2000;
+    padding: 0;
+    justify-content: space-around;
+  }
+
+  .left-sidebar:hover {
+    width: 100%;
+    padding-left: 0;
+  }
+
+
+  .sidebar-nav {
+    flex-direction: row;
+    width: 100%;
+    justify-content: space-around;
+    gap: 0;
+    padding: 0 10px;
+  }
+
+  .sidebar-link {
+    flex-direction: column;
+    height: 100%;
+    justify-content: center;
+    gap: 4px;
+    padding: 5px;
+    font-size: 24px;
+    /* Icon size */
+  }
+
+  .sidebar-text {
+    display: none !important;
+    /* Icons only on mobile to save space */
+  }
+
+  /* Main Content Padding for Bottom Nav */
+  .scrollable-content {
+    padding-bottom: 80px;
+    /* Space for bottom nav */
+  }
+
+  /* Hero Section */
+  .hero-section {
+    height: 60vh;
+    /* Shorter hero on mobile */
+  }
+
+  .hero-content {
+    padding-left: 20px;
+    padding-right: 20px;
+    bottom: 40px;
+    /* Lift up */
+  }
+
+  .hero-title {
+    font-size: clamp(2rem, 8vw, 3rem);
+    /* Fluid font size */
+  }
+
+  .hero-description {
+    font-size: 1rem;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    /* 2 lines max */
+  }
+
+  .hero-buttons {
+    flex-direction: column;
+    /* Stack buttons */
+    width: 100%;
+  }
+
+  .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Large Posters Logic */
+  .series-row {
+    padding: 10px 20px 30px 20px;
+    gap: 15px;
+  }
+
+  .series-card-container {
+    width: 70vw;
+    /* 70% of viewport width - Large Posters */
+  }
+
+  .section {
+    padding-left: 20px;
+  }
+}
+
+/* Desktop Base Styles for Details/Profile */
+.details-container-responsive {
+  margin-top: 20vh;
+  padding: 2rem;
+  display: flex;
+  gap: 3rem;
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.details-poster-responsive {
+  width: 300px;
+  height: auto;
+  aspect-ratio: 2/3;
+  object-fit: cover;
+  box-shadow: 0 4px 20px rgba(255, 204, 0, 0.1);
+}
+
+.details-info-responsive {
+  flex: 1;
+  min-width: 300px;
+}
+
+.profile-header-responsive {
+  display: flex;
+  gap: 2rem;
+  align-items: flex-start;
+}
+
+/* Responsive Layout Utilities */
+/* Tablet adjustments */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .series-card-container {
+    width: 40vw;
+    /* Medium size on tablet */
+  }
+}
+
+/* Responsive Shrinking */
+@media screen and (max-width: 1024px) {
+
+  .movie-details-container,
+  .profile-container {
+    zoom: 0.85;
+  }
+}
+
+@media screen and (max-width: 768px) {
+
+  .movie-details-container,
+  .profile-container {
+    zoom: 0.7;
+  }
+}
+
+/* Responsive Header Logo */
+.app-logo-text {
+  font-size: 2.5rem;
+  font-family: "Arial Black", "Impact", sans-serif;
+  text-transform: uppercase;
+  transition: font-size 0.3s ease;
+}
+
+@media (max-width: 768px) {
+  .app-logo-text {
+    font-size: 1.5rem !important;
+    /* Shrink on mobile */
+  }
+}
+
+/* --- Mobile Responsiveness & UI Polish --- */
+
+/* Action Buttons Responsive */
+.action-btn-responsive {
+  transition: all 0.3s ease;
+  white-space: nowrap;
+  /* Prevent text wrapping */
+}
+
+/* Episode List Spacing */
+.episode-list-container {
+  padding-left: 0;
+}
+
+/* Search Bar Responsive */
+.search-bar-container-responsive {
+  background-color: #000 !important;
+  /* Pure Black */
+  border: 2px solid #fff !important;
+  /* Square Border */
+  border-radius: 0 !important;
+  /* Square */
+}
+
+/* Suggestions Dropdown Responsive */
+.suggestions-dropdown-responsive {
+  background: #000 !important;
+  border: 1px solid #333 !important;
+  /* Dark grey border mostly, ensure square */
+  border-radius: 0 !important;
+}
+
+
+
+@media (max-width: 768px) {
+
+  /* Stack horizontal on mobile, shrink size to fit */
+  .action-btn-responsive {
+    font-size: 0.7rem !important;
+    padding: 8px 10px !important;
+    gap: 5px !important;
+    min-width: auto !important;
+  }
+
+  .action-btn-responsive svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+
+  /* Episode List Padding for Mobile - Increased as requested */
+  .episode-list-container {
+    padding-left: 40px !important;
+    padding-right: 15px !important;
+  }
+
+  /* Search Bar Mobile Width Constraint */
+  .search-bar-container-responsive {
+    max-width: 180px !important;
+    /* Shrink to show "ERIEE" */
+    border: none !important;
+    /* REMOVE WHITE STROKE */
+  }
+
+  .search-input-responsive {
+    font-size: 1rem !important;
+  }
+
+  /* Profile Mobile Optimizations */
+  .profile-container {
+    padding: 1rem !important;
+    /* Reduce huge padding */
+    zoom: 0.65;
+    /* Ensure full page fits */
+  }
+
+  .profile-stats-responsive div {
+    font-size: 0.9rem !important;
+    /* Shrink stats text */
+  }
+
+  .profile-nav-responsive button {
+    padding: 10px 15px !important;
+    font-size: 0.8rem !important;
+  }
+}

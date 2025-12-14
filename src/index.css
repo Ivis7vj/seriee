@@ -1,0 +1,56 @@
+/* Global Scrollbar Hiding */
+::-webkit-scrollbar {
+  display: none;
+}
+
+:root {
+  /* Default Dark Mode */
+  --bg-primary: #000000;
+  --bg-secondary: #111111;
+  --bg-tertiary: #222222;
+  --text-primary: #FFFFFF;
+  --text-secondary: #CCCCCC;
+  --text-muted: #888888;
+  --border-color: #333333;
+  --accent-color: #FFCC00;
+  --card-shadow: rgba(0, 0, 0, 0.5);
+  --input-bg: rgba(255, 255, 255, 0.1);
+}
+
+.light-mode {
+  /* Light Mode Overrides */
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F4F4F4;
+  --bg-tertiary: #E0E0E0;
+  --text-primary: #000000;
+  --text-secondary: #333333;
+  --text-muted: #666666;
+  --border-color: #DDDDDD;
+  --accent-color: #E6B800;
+  /* Slightly darker gold/orange for better contrast on white */
+  --card-shadow: rgba(0, 0, 0, 0.1);
+  --input-bg: rgba(0, 0, 0, 0.05);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -ms-overflow-style: none;
+  /* IE and Edge */
+  scrollbar-width: none;
+  /* Firefox */
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Arial Black', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 0.3s, color 0.3s;
+}
