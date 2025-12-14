@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { MdClose, MdStar, MdDelete, MdShare, MdPerson, MdFavorite, MdFavoriteBorder } from 'react-icons/md';
+import { MdClose, MdStar, MdStarHalf, MdDelete, MdShare, MdPerson, MdFavorite, MdFavoriteBorder } from 'react-icons/md';
 import { useNotification } from '../context/NotificationContext';
 import { Link } from 'react-router-dom';
 
@@ -182,17 +182,40 @@ const ReviewsDrawer = ({ isOpen, onClose, reviews, onDelete, onShare, onLike, cu
                                     </div>
                                 </div>
 
-                                {/* Rating */}
-                                <div style={{ display: 'flex', color: '#FFCC00', marginBottom: '10px', paddingLeft: '10px' }}>
-                                    {[...Array(5)].map((_, i) => (
-                                        <MdStar key={i} size={16} color={i < review.rating ? "#FFCC00" : "#444"} />
-                                    ))}
-                                </div>
+                                {/* Rating & Review Logic */}
+                                <div style={{ paddingLeft: '10px', marginBottom: '10px' }}>
+                                    {/* Stars Row */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginBottom: review.review ? '8px' : '0' }}>
+                                        {[...Array(5)].map((_, i) => {
+                                            const ratingValue = i + 1;
+                                            return (
+                                                <span key={i}>
+                                                    {review.rating >= ratingValue ? (
+                                                        <MdStar size={18} color="#FFCC00" />
+                                                    ) : review.rating >= ratingValue - 0.5 ? (
+                                                        <MdStarHalf size={18} color="#FFCC00" />
+                                                    ) : (
+                                                        <MdStar size={18} color="#444" />
+                                                    )}
+                                                </span>
+                                            );
+                                        })}
+                                    </div>
 
-                                {/* Review Text */}
-                                <p style={{ color: '#ccc', fontSize: '0.9rem', lineHeight: '1.4', margin: '0 0 10px 0', paddingLeft: '10px' }}>
-                                    {review.review}
-                                </p>
+                                    {/* Review Text (Only if present) */}
+                                    {review.review && (
+                                        <p style={{
+                                            color: '#e0e0e0',
+                                            fontSize: '0.95rem',
+                                            lineHeight: '1.5',
+                                            margin: '0',
+                                            fontFamily: 'Segoe UI, Helvetica, Arial, sans-serif',
+                                            fontWeight: '500' // Rich text feel
+                                        }}>
+                                            {review.review}
+                                        </p>
+                                    )}
+                                </div>
 
                                 {/* Actions (Only for 'Seriee' / Internal reviews) */}
                                 {review.source === 'app' && (

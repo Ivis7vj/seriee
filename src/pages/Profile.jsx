@@ -571,9 +571,9 @@ const Profile = () => {
                 case 'Liked':
                     if (activeTab === 'Liked') {
                         return (
-                            <div className="watchlist-grid" style={{ gap: '25px', paddingLeft: '15px', paddingTop: '15px' }}>
+                            <div className="watchlist-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', padding: '10px' }}>
                                 {likes.filter(i => i.type !== 'like_review').map(item => (
-                                    <div key={item.id} style={{ position: 'relative', paddingTop: starSeriesIds.has(item.seriesId || item.id) ? '20px' : '0', paddingLeft: starSeriesIds.has(item.seriesId || item.id) ? '20px' : '0' }}>
+                                    <div key={item.id} style={{ position: 'relative', paddingTop: starSeriesIds.has(item.seriesId || item.id) ? '0' : '0', paddingLeft: '0' }}>
                                         <Link to={item.seasonNumber ? `/tv/${item.seriesId || item.id}/season/${item.seasonNumber}` : `/tv/${item.seriesId || item.id}`} style={{ display: 'block', border: 'none', aspectRatio: '2/3', position: 'relative', overflow: 'visible' }}>
                                             {starSeriesIds.has(item.seriesId || item.id) && <PosterBadge />}
                                             <img src={`https://image.tmdb.org/t/p/w500${item.seasonPoster || item.poster_path}`} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', position: 'relative', zIndex: 1 }} />
@@ -587,7 +587,7 @@ const Profile = () => {
                     // Watchlist Case
                     const watchlistItems = processWatchlist(watchlist);
                     return (
-                        <div className="watchlist-grid" style={{ gap: '25px', paddingLeft: '15px', paddingTop: '15px' }}>
+                        <div className="watchlist-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', padding: '10px' }}>
                             {watchlistItems.map((item, idx) => {
                                 if (item.type === 'basket') {
                                     return (

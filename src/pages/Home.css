@@ -6,8 +6,10 @@
   font-family: 'Segoe UI', 'Arial', sans-serif;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  /* Lock body scroll */
+  /* overflow: hidden; Removed to allow scrolling */
+  overflow-y: auto;
+  /* Enable vertical scroll */
+  -webkit-overflow-scrolling: touch;
   transition: background-color 0.3s, color 0.3s;
 }
 
@@ -19,8 +21,9 @@
   /* Pure Dark */
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 60px;
+  justify-content: center;
+  /* Center content */
+  padding: 0 20px;
   position: fixed;
   top: 0;
   z-index: 1000;
@@ -46,6 +49,10 @@
   font-family: 'Anton', sans-serif;
   /* UPDATE LINE */
   letter-spacing: 1px;
+  position: absolute;
+  /* Force Center */
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 .header-nav {
@@ -380,8 +387,10 @@
   aspect-ratio: 16/9;
   /* Landscape ratio */
   object-fit: cover;
-  border-radius: 4px;
-  border: none;
+  border-radius: 0px;
+  /* Square Border */
+  border: 1px solid #333;
+  /* Visual Border */
   display: block;
 }
 

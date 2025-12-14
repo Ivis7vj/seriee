@@ -1525,7 +1525,7 @@ const MovieDetails = () => {
                                         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '200px' }}>
                                             {/* Header Info */}
                                             <div>
-                                                <h4 style={{ margin: 0, fontSize: '1.2rem', color: '#fff', fontWeight: 'bold' }}>
+                                                <h4 style={{ margin: 0, fontSize: '1.4rem', color: '#fff', fontWeight: 'bold' }}>
                                                     {ep.episode_number}. {ep.name}
                                                 </h4>
                                                 <div style={{ color: '#999', fontSize: '0.95rem', marginTop: '4px', fontWeight: '500' }}>
@@ -1534,7 +1534,7 @@ const MovieDetails = () => {
                                             </div>
 
                                             {/* Overview */}
-                                            <p style={{ color: '#ccc', fontSize: '0.95rem', lineHeight: '1.5', margin: '0', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                                            <p style={{ color: '#ccc', fontSize: '1.1rem', lineHeight: '1.5', margin: '0', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                                                 {ep.overview || "No overview available."}
                                             </p>
 

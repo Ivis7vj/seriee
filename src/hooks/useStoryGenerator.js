@@ -41,18 +41,19 @@ export const useStoryGenerator = () => {
                     const file = new File([blob], `Letterboard_Review_${movieName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.png`, { type: 'image/png' });
                     const url = URL.createObjectURL(blob);
 
-                    // Try Web Share API
+                    // Web Share API with File
                     if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
                         try {
                             await navigator.share({
                                 files: [file],
-                                title: 'My Letterboard Review',
-                                text: `Check out my review of ${movieName} on Letterboard!`
+                                // title: 'Review', // Often ignored by mobile OS for image shares
+                                // text: `Review for ${movieName}`,
                             });
                             setIsGenerating(false);
                             resolve({ success: true, method: 'share', url });
                         } catch (shareError) {
                             console.log('Share API failed or cancelled:', shareError);
+                            // If user cancelled, it's technically a success in terms of flow execution
                             setIsGenerating(false);
                             resolve({ success: true, method: 'fallback', url, file });
                         }
