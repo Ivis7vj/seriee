@@ -91,6 +91,10 @@ export function AuthProvider({ children }) {
     }
 
     useEffect(() => {
+        if (!auth) {
+            setLoading(false);
+            return;
+        }
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             setCurrentUser(user);
             if (user) {
@@ -108,6 +112,43 @@ export function AuthProvider({ children }) {
 
         return unsubscribe;
     }, []);
+
+    if (!auth) {
+        return (
+            <div style={{
+                height: '100vh',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                backgroundColor: '#111',
+                color: '#fff',
+                padding: '2rem',
+                textAlign: 'center'
+            }}>
+                <h1 style={{ color: '#ff4444', marginBottom: '1rem' }}>Configuration Error</h1>
+                <p style={{ fontSize: '1.2rem', marginBottom: '2rem' }}>
+                    The application cannot connect to Firebase.
+                </p>
+                <div style={{
+                    backgroundColor: '#222',
+                    padding: '1.5rem',
+                    borderRadius: '8px',
+                    maxWidth: '600px',
+                    textAlign: 'left'
+                }}>
+                    <strong style={{ display: 'block', marginBottom: '1rem', color: '#FFCC00' }}>Likely Cause: Missing Environment Variables</strong>
+                    <p style={{ marginBottom: '0.5rem' }}>If you are viewing this on Vercel:</p>
+                    <ol style={{ marginLeft: '1.5rem', lineHeight: '1.6' }}>
+                        <li>Go to your Vercel Project Dashboard.</li>
+                        <li>Navigate to <strong>Settings</strong> &gt; <strong>Environment Variables</strong>.</li>
+                        <li>Add the required keys (VITE_API_KEY, etc.) from your local <code>.env</code> file.</li>
+                        <li>Go to <strong>Deployments</strong> and <strong>Redeploy</strong>.</li>
+                    </ol>
+                </div>
+            </div>
+        );
+    }
 
     const value = {
         currentUser,
